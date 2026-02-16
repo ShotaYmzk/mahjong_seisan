@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { calcSettlement, generateLineText } from "../settlement";
 import type { SessionPlayer, Expense, RuleSet } from "../types";
-import { DEFAULT_RULE_SET } from "../types";
+import { DEFAULT_RULE_SET, DEFAULT_RULE_SET_3P } from "../types";
 
 const players: SessionPlayer[] = [
   { id: "A", displayName: "田中", seatOrder: 1, userId: null, chipCount: null },
@@ -258,5 +258,99 @@ describe("calcSettlement", () => {
     expect(text).toContain("+45p");
     expect(text).toContain("💰 送金");
     expect(text).toContain("→");
+  });
+});
+
+describe("calcSettlement - 三人麻雀 (3-player)", () => {
+  const players3p: SessionPlayer[] = [
+    { id: "A", displayName: "田中", seatOrder: 1, userId: null, chipCount: null },
+    { id: "B", displayName: "佐藤", seatOrder: 2, userId: null, chipCount: null },
+    { id: "C", displayName: "鈴木", seatOrder: 3, userId: null, chipCount: null },
+  ];
+
+  const rules3p: RuleSet = DEFAULT_RULE_SET_3P;
+
+  it("3-player: 2 hanchan, no chips, no expenses", () => {
+    const hanchanInputs = [
+      {
+        hanchanId: "h1",
+        seq: 1,
+        scores: [
+          { playerId: "A", seatOrder: 1, rawScore: 55000 },
+          { playerId: "B", seatOrder: 2, rawScore: 30000 },
+          { playerId: "C", seatOrder: 3, rawScore: 20000 },
+        ],
+      },
+      {
+        hanchanId: "h2",
+        seq: 2,
+        scores: [
+          { playerId: "A", seatOrder: 1, rawScore: 20000 },
+          { playerId: "B", seatOrder: 2, rawScore: 50000 },
+          { playerId: "C", seatOrder: 3, rawScore: 35000 },
+        ],
+      },
+    ];
+
+    const result = calcSettlement(hanchanInputs, [], players3p, rules3p);
+
+    expect(result.hasUnconfirmed).toBe(false);
+
+    const totalPts = result.playerBalances.reduce(
+      (s, p) => s + p.mahjongPoints,
+      0
+    );
+    expect(totalPts).toBe(0);
+
+    const totalYen = result.playerBalances.reduce(
+      (s, p) => s + p.totalYen,
+      0
+    );
+    expect(totalYen).toBe(0);
+
+    expect(result.transfers.length).toBeGreaterThan(0);
+  });
+
+  it("3-player: chips + expenses included in settlement", () => {
+    const hanchanInputs = [
+      {
+        hanchanId: "h1",
+        seq: 1,
+        scores: [
+          { playerId: "A", seatOrder: 1, rawScore: 55000 },
+          { playerId: "B", seatOrder: 2, rawScore: 30000 },
+          { playerId: "C", seatOrder: 3, rawScore: 20000 },
+        ],
+      },
+    ];
+
+    const playersWithChips: SessionPlayer[] = [
+      { id: "A", displayName: "田中", seatOrder: 1, userId: null, chipCount: -2 },
+      { id: "B", displayName: "佐藤", seatOrder: 2, userId: null, chipCount: 2 },
+      { id: "C", displayName: "鈴木", seatOrder: 3, userId: null, chipCount: 0 },
+    ];
+
+    const expenses: Expense[] = [
+      {
+        id: "e1",
+        payerId: "C",
+        amount: 3000,
+        description: "飲み物代",
+        isAllMembers: true,
+        sharePlayerIds: ["A", "B", "C"],
+      },
+    ];
+
+    const result = calcSettlement(
+      hanchanInputs,
+      expenses,
+      playersWithChips,
+      rules3p
+    );
+
+    expect(result.hasUnconfirmed).toBe(false);
+
+    const total = result.playerBalances.reduce((s, p) => s + p.totalYen, 0);
+    expect(total).toBe(0);
   });
 });

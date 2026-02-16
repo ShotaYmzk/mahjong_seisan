@@ -244,6 +244,61 @@ input[type="number"] {
   animation: scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* ── Prose-like styles for static pages ────────────────── */
+
+.prose-custom h2 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.prose-custom h3 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.prose-custom p {
+  font-size: 0.875rem;
+  line-height: 1.75;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.prose-custom ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.prose-custom ul li {
+  font-size: 0.875rem;
+  line-height: 1.75;
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.prose-custom a {
+  color: var(--c-jade);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.prose-custom a:hover {
+  color: var(--c-jade-dim);
+}
+
+.prose-custom strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 /* ── Focus ring utility ────────────────────────────────── */
 
 .focus-ring {

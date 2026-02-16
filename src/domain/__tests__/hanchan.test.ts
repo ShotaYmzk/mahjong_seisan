@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { calcHanchanResult, roundToUnit } from "../hanchan";
 import type { RuleSet, PlayerScore } from "../types";
-import { DEFAULT_RULE_SET } from "../types";
+import { DEFAULT_RULE_SET, DEFAULT_RULE_SET_3P } from "../types";
 
 describe("roundToUnit", () => {
   it("rounds to nearest 100", () => {
@@ -240,5 +240,134 @@ describe("calcHanchanResult", () => {
     expect(pD.tobiBonusPoints).toBe(-10);
     expect(pB.tobiBonusPoints).toBe(10);
     expect(result.tobiEvents[0].receiverPlayerId).toBe("B");
+  });
+});
+
+describe("calcHanchanResult - 三人麻雀 (3-player)", () => {
+  const rules3p: RuleSet = DEFAULT_RULE_SET_3P;
+
+  it("calculates a standard 3-player hanchan with confirmed scores", () => {
+    // 35000 × 3 = 105000 total
+    const scores: PlayerScore[] = [
+      { playerId: "A", seatOrder: 1, rawScore: 55000 },
+      { playerId: "B", seatOrder: 2, rawScore: 30000 },
+      { playerId: "C", seatOrder: 3, rawScore: 20000 },
+    ];
+
+    const result = calcHanchanResult("h1", 1, scores, rules3p);
+
+    expect(result.isConfirmed).toBe(true);
+    expect(result.scoreSum).toBe(105000);
+    expect(result.expectedSum).toBe(105000);
+
+    const pA = result.playerResults.find((p) => p.playerId === "A")!;
+    const pB = result.playerResults.find((p) => p.playerId === "B")!;
+    const pC = result.playerResults.find((p) => p.playerId === "C")!;
+
+    expect(pA.rank).toBe(1);
+    expect(pB.rank).toBe(2);
+    expect(pC.rank).toBe(3);
+
+    // A: diff = 55000 - 40000 = 15000, oka = (40000-35000)*3 = 15000, uma = 20*1000 = 20000
+    // total = 15000 + 15000 + 20000 = 50000, points = 50
+    expect(pA.pointDiff).toBe(15000);
+    expect(pA.okaAmount).toBe(15000);
+    expect(pA.umaAmount).toBe(20000);
+    expect(pA.totalPoints).toBe(50000);
+    expect(pA.points).toBe(50);
+
+    // B: diff = 30000 - 40000 = -10000, oka = 0, uma = 0*1000 = 0
+    // total = -10000, points = -10
+    expect(pB.pointDiff).toBe(-10000);
+    expect(pB.okaAmount).toBe(0);
+    expect(pB.umaAmount).toBe(0);
+    expect(pB.totalPoints).toBe(-10000);
+    expect(pB.points).toBe(-10);
+
+    // C: diff = 20000 - 40000 = -20000, oka = 0, uma = -20*1000 = -20000
+    // total = -40000, points = -40
+    expect(pC.pointDiff).toBe(-20000);
+    expect(pC.okaAmount).toBe(0);
+    expect(pC.umaAmount).toBe(-20000);
+    expect(pC.totalPoints).toBe(-40000);
+    expect(pC.points).toBe(-40);
+
+    // Sum of points should be 0
+    const totalPts = result.playerResults.reduce((s, p) => s + p.points, 0);
+    expect(totalPts).toBe(0);
+  });
+
+  it("detects unconfirmed when sum is not 105000 (35000 × 3)", () => {
+    const scores: PlayerScore[] = [
+      { playerId: "A", seatOrder: 1, rawScore: 55000 },
+      { playerId: "B", seatOrder: 2, rawScore: 30000 },
+      { playerId: "C", seatOrder: 3, rawScore: 21000 },
+    ];
+
+    const result = calcHanchanResult("h1", 1, scores, rules3p);
+    expect(result.isConfirmed).toBe(false);
+    expect(result.scoreSum).toBe(106000);
+  });
+
+  it("handles oka_type none for 3-player", () => {
+    const rulesNoOka: RuleSet = { ...rules3p, okaType: "none" };
+    const scores: PlayerScore[] = [
+      { playerId: "A", seatOrder: 1, rawScore: 55000 },
+      { playerId: "B", seatOrder: 2, rawScore: 30000 },
+      { playerId: "C", seatOrder: 3, rawScore: 20000 },
+    ];
+
+    const result = calcHanchanResult("h1", 1, scores, rulesNoOka);
+    const pA = result.playerResults.find((p) => p.playerId === "A")!;
+
+    expect(pA.okaAmount).toBe(0);
+    expect(pA.totalPoints).toBe(15000 + 0 + 20000);
+    expect(pA.points).toBe(35);
+  });
+
+  it("only uses 3 uma values (uma4 is ignored)", () => {
+    const scores: PlayerScore[] = [
+      { playerId: "A", seatOrder: 1, rawScore: 35000 },
+      { playerId: "B", seatOrder: 2, rawScore: 35000 },
+      { playerId: "C", seatOrder: 3, rawScore: 35000 },
+    ];
+
+    const result = calcHanchanResult("h1", 1, scores, rules3p);
+    expect(result.playerResults).toHaveLength(3);
+
+    // Verify only 3 players get uma applied
+    const pA = result.playerResults.find((p) => p.playerId === "A")!;
+    const pB = result.playerResults.find((p) => p.playerId === "B")!;
+    const pC = result.playerResults.find((p) => p.playerId === "C")!;
+
+    expect(pA.umaAmount).toBe(20000);  // uma1 = 20
+    expect(pB.umaAmount).toBe(0);      // uma2 = 0
+    expect(pC.umaAmount).toBe(-20000); // uma3 = -20
+  });
+
+  it("applies tobi bonus for 3-player", () => {
+    const tobiRules: RuleSet = {
+      ...rules3p,
+      tobiBonusEnabled: true,
+      tobiBonusPoints: 10,
+      tobiBonusChips: 0,
+      tobiReceiverType: "top",
+    };
+    const scores: PlayerScore[] = [
+      { playerId: "A", seatOrder: 1, rawScore: 75000 },
+      { playerId: "B", seatOrder: 2, rawScore: 30000 },
+      { playerId: "C", seatOrder: 3, rawScore: 0 },
+    ];
+
+    const result = calcHanchanResult("h1", 1, scores, tobiRules);
+    const pA = result.playerResults.find((p) => p.playerId === "A")!;
+    const pC = result.playerResults.find((p) => p.playerId === "C")!;
+
+    expect(pC.isTobi).toBe(true);
+    expect(pC.tobiBonusPoints).toBe(-10);
+    expect(pA.tobiBonusPoints).toBe(10);
+
+    const totalPts = result.playerResults.reduce((s, p) => s + p.points, 0);
+    expect(totalPts).toBe(0);
   });
 });

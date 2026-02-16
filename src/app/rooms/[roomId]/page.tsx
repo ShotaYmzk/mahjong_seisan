@@ -43,6 +43,7 @@ export default function RoomPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newSessionName, setNewSessionName] = useState("");
+  const [gameMode, setGameMode] = useState<3 | 4>(4);
   const [playerNames, setPlayerNames] = useState(["", "", "", ""]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -144,16 +145,45 @@ export default function RoomPage() {
     }
   };
 
+  const maxPlayers = gameMode === 3 ? 4 : 6;
+  const minPlayers = gameMode;
+
+  const handleGameModeChange = (mode: 3 | 4) => {
+    setGameMode(mode);
+    setError("");
+    if (mode === 3) {
+      setPlayerNames(["", "", ""]);
+    } else {
+      setPlayerNames(["", "", "", ""]);
+    }
+  };
+
+  const addPlayerSlot = () => {
+    if (playerNames.length < maxPlayers) {
+      setPlayerNames((prev) => [...prev, ""]);
+    }
+  };
+
+  const removePlayerSlot = (index: number) => {
+    if (playerNames.length > minPlayers) {
+      setPlayerNames((prev) => prev.filter((_, i) => i !== index));
+    }
+  };
+
   const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSessionName.trim()) {
-      setError("セット名を入力してください");
-      return;
-    }
     if (playerNames.some((n) => !n.trim())) {
-      setError("4人全員の名前を入力してください");
+      setError("全員の名前を入力してください");
       return;
     }
+    if (playerNames.length < minPlayers) {
+      setError(`最低${minPlayers}人のプレイヤーが必要です`);
+      return;
+    }
+
+    const sessionName =
+      newSessionName.trim() ||
+      `${new Date().getMonth() + 1}/${new Date().getDate()} セット`;
 
     setCreating(true);
     setError("");
@@ -161,16 +191,30 @@ export default function RoomPage() {
     try {
       const { data: sessData, error: sessErr } = await supabase
         .from("sessions")
-        .insert({ room_id: roomId, name: newSessionName.trim() })
+        .insert({ room_id: roomId, name: sessionName })
         .select()
         .single();
 
       if (sessErr) throw sessErr;
       const sess = sessData as unknown as { id: string };
 
-      const { error: ruleErr } = await supabase.from("rule_sets").insert({
-        session_id: sess.id,
-      });
+      const ruleInsert =
+        gameMode === 3
+          ? {
+              session_id: sess.id,
+              player_count: 3,
+              starting_points: 35000,
+              return_points: 40000,
+              uma_1: 20,
+              uma_2: 0,
+              uma_3: -20,
+              uma_4: 0,
+            }
+          : { session_id: sess.id, player_count: 4 };
+
+      const { error: ruleErr } = await supabase
+        .from("rule_sets")
+        .insert(ruleInsert);
       if (ruleErr) throw ruleErr;
 
       const playerInserts = playerNames.map((name, i) => {
@@ -461,24 +505,94 @@ export default function RoomPage() {
             value={newSessionName}
             onChange={(e) => setNewSessionName(e.target.value)}
           />
+
+          {/* Game mode toggle: 三麻 / 四麻 */}
           <div>
             <label className="text-[13px] font-medium text-text-secondary mb-2 block">
-              プレイヤー（4人）
+              対局モード
             </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleGameModeChange(4)}
+                className={`flex flex-col items-center gap-1 px-3 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${
+                  gameMode === 4
+                    ? "bg-jade text-text-on-jade shadow-sm ring-2 ring-jade/30"
+                    : "bg-bg-tertiary text-text-secondary border border-border-primary hover:border-jade/30"
+                }`}
+              >
+                <span className="text-lg">🀄</span>
+                <span>四人麻雀</span>
+                <span className={`text-[10px] ${gameMode === 4 ? "text-white/70" : "text-text-muted"}`}>
+                  4人対局
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleGameModeChange(3)}
+                className={`flex flex-col items-center gap-1 px-3 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${
+                  gameMode === 3
+                    ? "bg-jade text-text-on-jade shadow-sm ring-2 ring-jade/30"
+                    : "bg-bg-tertiary text-text-secondary border border-border-primary hover:border-jade/30"
+                }`}
+              >
+                <span className="text-lg">🀄</span>
+                <span>三人麻雀</span>
+                <span className={`text-[10px] ${gameMode === 3 ? "text-white/70" : "text-text-muted"}`}>
+                  3人対局（サンマ）
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-[13px] font-medium text-text-secondary">
+                プレイヤー（{playerNames.length}人）
+              </label>
+              {playerNames.length < maxPlayers && (
+                <button
+                  type="button"
+                  onClick={addPlayerSlot}
+                  className="text-xs text-jade hover:text-jade-dim font-medium transition-colors"
+                >
+                  + 人数追加（{playerNames.length + 1}人目）
+                </button>
+              )}
+            </div>
             <div className="flex flex-col gap-2">
               {playerNames.map((name, i) => (
-                <Input
-                  key={i}
-                  placeholder={`${i + 1}人目の名前`}
-                  value={name}
-                  onChange={(e) => {
-                    const next = [...playerNames];
-                    next[i] = e.target.value;
-                    setPlayerNames(next);
-                  }}
-                />
+                <div key={i} className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <Input
+                      placeholder={`${i + 1}人目の名前`}
+                      value={name}
+                      onChange={(e) => {
+                        const next = [...playerNames];
+                        next[i] = e.target.value;
+                        setPlayerNames(next);
+                      }}
+                    />
+                  </div>
+                  {i >= minPlayers && (
+                    <button
+                      type="button"
+                      onClick={() => removePlayerSlot(i)}
+                      className="p-2 text-text-muted hover:text-red transition-colors shrink-0"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
+            {playerNames.length > gameMode && (
+              <p className="text-xs text-text-muted mt-2">
+                {playerNames.length}人参加の場合、半荘ごとに{gameMode}人が対局し残りは抜け番になります
+              </p>
+            )}
             {members.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <span className="text-xs text-text-muted mr-1 self-center">

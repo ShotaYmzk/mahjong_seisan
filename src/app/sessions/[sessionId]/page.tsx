@@ -75,6 +75,7 @@ export default function SessionPage() {
 
   const rules: RuleSet = ruleSet
     ? {
+        playerCount: (ruleSet.player_count === 3 ? 3 : 4) as 3 | 4,
         startingPoints: ruleSet.starting_points,
         returnPoints: ruleSet.return_points,
         uma1: ruleSet.uma_1,
@@ -92,6 +93,7 @@ export default function SessionPage() {
         tobiReceiverType: ruleSet.tobi_receiver_type as "top" | "manual",
       }
     : {
+        playerCount: 4 as const,
         startingPoints: 25000,
         returnPoints: 30000,
         uma1: 10,
@@ -158,7 +160,7 @@ export default function SessionPage() {
       label: "ルール",
       icon: "⚙️",
       content: (
-        <RuleTab sessionId={sessionId} ruleSet={ruleSet} onRefetch={refetch} />
+        <RuleTab sessionId={sessionId} ruleSet={ruleSet} playerCount={rules.playerCount} onRefetch={refetch} />
       ),
     },
     {

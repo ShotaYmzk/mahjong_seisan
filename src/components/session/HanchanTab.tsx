@@ -40,8 +40,99 @@ export function HanchanTab({
   const [saving, setSaving] = useState(false);
   const [conflictError, setConflictError] = useState("");
   const [tobiBusters, setTobiBusters] = useState<Record<string, string>>({});
+  const [showPlayerSelect, setShowPlayerSelect] = useState(false);
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<string>>(
+    new Set()
+  );
 
-  const addHanchan = async () => {
+  const pc = rules.playerCount;
+  const needsPlayerSelect = players.length > pc;
+
+  /* ---------- Smart default for player rotation ---------- */
+  const getDefaultSelected = (): Set<string> => {
+    if (players.length <= pc) {
+      return new Set(players.map((p) => p.id));
+    }
+
+    const lastHanchan = hanchanList[hanchanList.length - 1];
+    if (!lastHanchan) {
+      return new Set(players.slice(0, pc).map((p) => p.id));
+    }
+
+    const lastResults = roundResults.filter(
+      (r) => r.hanchan_id === lastHanchan.id
+    );
+    const lastPlayingIds = new Set(lastResults.map((r) => r.player_id));
+    const satOutLast = players.filter((p) => !lastPlayingIds.has(p.id));
+    const sitOutCount = players.length - pc;
+
+    if (satOutLast.length === sitOutCount) {
+      const satOutIndices = satOutLast.map((p) =>
+        players.findIndex((pl) => pl.id === p.id)
+      );
+      const nextSitOutIndices = satOutIndices.map(
+        (idx) => (idx + sitOutCount) % players.length
+      );
+      return new Set(
+        players
+          .filter((_, i) => !nextSitOutIndices.includes(i))
+          .map((p) => p.id)
+      );
+    }
+
+    return new Set(players.slice(0, pc).map((p) => p.id));
+  };
+
+  /* ---------- Get playing players for a hanchan ---------- */
+  const getHanchanPlayers = (hanchanId: string): SessionPlayerRow[] => {
+    const resultPlayerIds = new Set(
+      roundResults
+        .filter((r) => r.hanchan_id === hanchanId)
+        .map((r) => r.player_id)
+    );
+    if (resultPlayerIds.size === 0) return players;
+    return players.filter((p) => resultPlayerIds.has(p.id));
+  };
+
+  const getSittingOut = (hanchanId: string): SessionPlayerRow[] => {
+    const resultPlayerIds = new Set(
+      roundResults
+        .filter((r) => r.hanchan_id === hanchanId)
+        .map((r) => r.player_id)
+    );
+    if (resultPlayerIds.size === 0) return [];
+    return players.filter((p) => !resultPlayerIds.has(p.id));
+  };
+
+  /* ---------- Add hanchan ---------- */
+  const handleAddClick = () => {
+    if (needsPlayerSelect) {
+      setSelectedPlayerIds(getDefaultSelected());
+      setShowPlayerSelect(true);
+    } else {
+      addHanchan(players.map((p) => p.id));
+    }
+  };
+
+  const togglePlayerSelection = (playerId: string) => {
+    setSelectedPlayerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(playerId)) {
+        next.delete(playerId);
+      } else {
+        next.add(playerId);
+      }
+      return next;
+    });
+  };
+
+  const confirmPlayerSelection = () => {
+    if (selectedPlayerIds.size !== pc) return;
+    setShowPlayerSelect(false);
+    addHanchan(Array.from(selectedPlayerIds));
+  };
+
+  const addHanchan = async (selectedIds: string[]) => {
     setAdding(true);
     try {
       const nextSeq =
@@ -58,7 +149,10 @@ export function HanchanTab({
       if (error) throw error;
       const hanchan = hanchanData as unknown as { id: string };
 
-      const resultInserts = players.map((p) => ({
+      const selectedPlayers = players.filter((p) =>
+        selectedIds.includes(p.id)
+      );
+      const resultInserts = selectedPlayers.map((p) => ({
         hanchan_id: hanchan.id,
         session_id: sessionId,
         player_id: p.id,
@@ -69,11 +163,11 @@ export function HanchanTab({
 
       await logActivity(supabase, sessionId, user?.id, "hanchan_created", {
         seq: nextSeq,
+        playerCount: selectedPlayers.length,
       });
 
-      // Pre-populate edit state so it opens in edit mode immediately
       const scoreMap: Record<string, string> = {};
-      for (const p of players) {
+      for (const p of selectedPlayers) {
         scoreMap[p.id] = "";
       }
       setScores(scoreMap);
@@ -88,10 +182,13 @@ export function HanchanTab({
     }
   };
 
+  /* ---------- Edit ---------- */
   const startEdit = (hanchanId: string) => {
     const results = roundResults.filter((r) => r.hanchan_id === hanchanId);
+    const playingIds = new Set(results.map((r) => r.player_id));
     const scoreMap: Record<string, string> = {};
     const tobiMap: Record<string, string> = {};
+
     for (const r of results) {
       scoreMap[r.player_id] = String(r.raw_score);
       if (r.tobi_by_player_id) {
@@ -99,7 +196,7 @@ export function HanchanTab({
       }
     }
     for (const p of players) {
-      if (!scoreMap[p.id]) {
+      if (playingIds.has(p.id) && !scoreMap[p.id]) {
         scoreMap[p.id] = String(rules.startingPoints);
       }
     }
@@ -109,6 +206,7 @@ export function HanchanTab({
     setConflictError("");
   };
 
+  /* ---------- Save ---------- */
   const saveScores = async (hanchanId: string) => {
     setSaving(true);
     setConflictError("");
@@ -118,13 +216,20 @@ export function HanchanTab({
       if (!hanchan) return;
 
       const results = roundResults.filter((r) => r.hanchan_id === hanchanId);
-      const sum = players.reduce(
+      const hanchanPlayers = getHanchanPlayers(hanchanId);
+
+      const editPlayers =
+        hanchanPlayers.length > 0
+          ? hanchanPlayers
+          : players.filter((p) => p.id in scores);
+
+      const sum = editPlayers.reduce(
         (acc, p) => acc + (parseInt(scores[p.id]) || 0),
         0
       );
-      const isConfirmed = sum === rules.startingPoints * 4;
+      const isConfirmed = sum === rules.startingPoints * pc;
 
-      for (const p of players) {
+      for (const p of editPlayers) {
         const existing = results.find((r) => r.player_id === p.id);
         const newScore = parseInt(scores[p.id]) || 0;
 
@@ -194,6 +299,7 @@ export function HanchanTab({
     }
   };
 
+  /* ---------- Delete ---------- */
   const deleteHanchan = async (hanchanId: string) => {
     if (!confirm("この半荘を削除しますか？")) return;
 
@@ -215,11 +321,22 @@ export function HanchanTab({
     }
   };
 
+  /* ---------- Render ---------- */
+
+  const editingPlayers = players.filter(
+    (p) => scores[p.id] !== undefined
+  );
+
   return (
     <div className="p-4 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold">半荘一覧</h2>
-        <Button size="sm" onClick={addHanchan} loading={adding}>
+        <Button
+          size="sm"
+          onClick={handleAddClick}
+          loading={adding}
+          disabled={showPlayerSelect}
+        >
           <svg
             className="w-4 h-4"
             fill="none"
@@ -240,13 +357,98 @@ export function HanchanTab({
       {conflictError && (
         <div className="bg-red-surface border border-red/20 rounded-xl p-3 text-sm text-red flex items-center justify-between">
           <span>{conflictError}</span>
-          <Button variant="ghost" size="sm" className="text-red" onClick={onRefetch}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-red"
+            onClick={onRefetch}
+          >
             再読込
           </Button>
         </div>
       )}
 
-      {hanchanList.length === 0 ? (
+      {/* Player selection for 5+ player sessions */}
+      {showPlayerSelect && (
+        <Card className="border-2 border-jade/30">
+          <h3 className="text-sm font-bold text-text-primary mb-1">
+            対局メンバーを選択
+          </h3>
+          <p className="text-xs text-text-muted mb-3">
+            {pc}人を選んでください（残りは抜け番）
+          </p>
+          <div className="flex flex-col gap-2 mb-4">
+            {players.map((p) => {
+              const isSelected = selectedPlayerIds.has(p.id);
+              const lastHanchan = hanchanList[hanchanList.length - 1];
+              const wasSittingOut =
+                lastHanchan &&
+                !roundResults.some(
+                  (r) =>
+                    r.hanchan_id === lastHanchan.id && r.player_id === p.id
+                );
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => togglePlayerSelection(p.id)}
+                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+                    isSelected
+                      ? "bg-jade text-text-on-jade shadow-sm"
+                      : "bg-bg-tertiary text-text-secondary border border-border-primary hover:border-jade/30"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    {p.display_name}
+                    {wasSittingOut && (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          isSelected
+                            ? "bg-white/20"
+                            : "bg-gold-surface text-gold"
+                        }`}
+                      >
+                        前回抜け
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-xs">
+                    {isSelected ? "対局" : "抜け番"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center justify-between">
+            <span
+              className={`text-xs font-medium ${
+                selectedPlayerIds.size === pc ? "text-jade" : "text-red"
+              }`}
+            >
+              {selectedPlayerIds.size}/{pc}人 選択中
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowPlayerSelect(false)}
+              >
+                キャンセル
+              </Button>
+              <Button
+                size="sm"
+                onClick={confirmPlayerSelection}
+                disabled={selectedPlayerIds.size !== pc}
+                loading={adding}
+              >
+                この{pc}人で開始
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {hanchanList.length === 0 && !showPlayerSelect ? (
         <Card className="text-center py-10">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-bg-tertiary mb-3">
             <span className="text-2xl">🀄</span>
@@ -260,8 +462,10 @@ export function HanchanTab({
         hanchanList.map((h) => {
           const results = roundResults.filter((r) => r.hanchan_id === h.id);
           const isEditing = editingHanchan === h.id;
+          const sittingOut = getSittingOut(h.id);
 
-          const playerScores: PlayerScore[] = players.map((p) => ({
+          const hanchanPlayerList = getHanchanPlayers(h.id);
+          const playerScores: PlayerScore[] = hanchanPlayerList.map((p) => ({
             playerId: p.id,
             seatOrder: p.seat_order,
             rawScore:
@@ -283,6 +487,14 @@ export function HanchanTab({
             rules,
             tobiMap
           );
+
+          const currentEditPlayers = isEditing ? editingPlayers : [];
+          const editSum = isEditing
+            ? currentEditPlayers.reduce(
+                (acc, p) => acc + (parseInt(scores[p.id]) || 0),
+                0
+              )
+            : 0;
 
           return (
             <Card key={h.id}>
@@ -318,7 +530,7 @@ export function HanchanTab({
 
               {isEditing ? (
                 <div className="flex flex-col gap-3">
-                  {players.map((p) => (
+                  {currentEditPlayers.map((p) => (
                     <div key={p.id} className="flex items-center gap-3">
                       <span className="text-sm text-text-secondary w-16 truncate font-medium">
                         {p.display_name}
@@ -338,10 +550,10 @@ export function HanchanTab({
                     </div>
                   ))}
 
-                  {/* Tobi buster selection — only when a real negative score is entered */}
+                  {/* Tobi buster selection */}
                   {rules.tobiBonusEnabled &&
                     rules.tobiReceiverType === "manual" &&
-                    players
+                    currentEditPlayers
                       .filter((p) => {
                         const raw = scores[p.id];
                         if (!raw || raw.trim() === "") return false;
@@ -367,7 +579,7 @@ export function HanchanTab({
                             className="flex-1 bg-bg-tertiary border border-border-primary rounded-lg px-2.5 py-1.5 text-sm text-text-primary"
                           >
                             <option value="">選択してください</option>
-                            {players
+                            {currentEditPlayers
                               .filter((p) => p.id !== busted.id)
                               .map((p) => (
                                 <option key={p.id} value={p.id}>
@@ -383,25 +595,16 @@ export function HanchanTab({
                       合計:{" "}
                       <span
                         className={`font-mono font-bold ${
-                          players.reduce(
-                            (acc, p) => acc + (parseInt(scores[p.id]) || 0),
-                            0
-                          ) ===
-                          rules.startingPoints * 4
+                          editSum === rules.startingPoints * pc
                             ? "text-jade"
                             : "text-red"
                         }`}
                       >
-                        {players
-                          .reduce(
-                            (acc, p) => acc + (parseInt(scores[p.id]) || 0),
-                            0
-                          )
-                          .toLocaleString()}
+                        {editSum.toLocaleString()}
                       </span>
                       <span className="text-text-muted">
                         {" "}
-                        / {(rules.startingPoints * 4).toLocaleString()}
+                        / {(rules.startingPoints * pc).toLocaleString()}
                       </span>
                     </span>
                   </div>
@@ -428,7 +631,9 @@ export function HanchanTab({
               ) : (
                 <div className="flex flex-col gap-0.5">
                   {calcResult.playerResults.map((pr) => {
-                    const player = players.find((p) => p.id === pr.playerId);
+                    const player = players.find(
+                      (p) => p.id === pr.playerId
+                    );
                     return (
                       <div
                         key={pr.playerId}
@@ -466,10 +671,31 @@ export function HanchanTab({
                       </div>
                     );
                   })}
+
+                  {/* Sitting out players */}
+                  {sittingOut.length > 0 && (
+                    <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-border-subtle">
+                      <span className="text-[10px] font-medium text-text-muted bg-bg-tertiary px-1.5 py-0.5 rounded">
+                        抜け番
+                      </span>
+                      <span className="text-xs text-text-muted">
+                        {sittingOut.map((p) => p.display_name).join(", ")}
+                      </span>
+                    </div>
+                  )}
+
                   {!calcResult.isConfirmed && (
                     <p className="text-xs text-gold mt-2 flex items-center gap-1">
-                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92z" clipRule="evenodd" />
+                      <svg
+                        className="w-3 h-3"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92z"
+                          clipRule="evenodd"
+                        />
                       </svg>
                       合計点が不一致: {calcResult.scoreSum.toLocaleString()} /{" "}
                       {calcResult.expectedSum.toLocaleString()}

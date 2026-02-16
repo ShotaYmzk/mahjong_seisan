@@ -37,18 +37,35 @@ export function SettlementTab({
   const [copied, setCopied] = useState(false);
 
   const settlement = useMemo(() => {
-    const hanchanInputs: HanchanInput[] = hanchanList.map((h) => ({
-      hanchanId: h.id,
-      seq: h.seq,
-      scores: players.map((p) => ({
-        playerId: p.id,
-        seatOrder: p.seat_order,
-        rawScore:
-          roundResults.find(
-            (r) => r.hanchan_id === h.id && r.player_id === p.id
-          )?.raw_score ?? rules.startingPoints,
-      })),
-    }));
+    const hanchanInputs: HanchanInput[] = hanchanList.map((h) => {
+      const hResults = roundResults.filter((r) => r.hanchan_id === h.id);
+      const playingPlayerIds = new Set(hResults.map((r) => r.player_id));
+      const playingPlayers =
+        playingPlayerIds.size > 0
+          ? players.filter((p) => playingPlayerIds.has(p.id))
+          : players;
+
+      return {
+        hanchanId: h.id,
+        seq: h.seq,
+        scores: playingPlayers.map((p) => ({
+          playerId: p.id,
+          seatOrder: p.seat_order,
+          rawScore:
+            hResults.find((r) => r.player_id === p.id)?.raw_score ??
+            rules.startingPoints,
+        })),
+        tobiBusters: (() => {
+          const map = new Map<string, string>();
+          for (const r of hResults) {
+            if (r.tobi_by_player_id) {
+              map.set(r.player_id, r.tobi_by_player_id);
+            }
+          }
+          return map.size > 0 ? map : undefined;
+        })(),
+      };
+    });
 
     const domainExpenses: Expense[] = expenses.map((exp) => {
       const shares = expenseShares.filter((s) => s.expense_id === exp.id);

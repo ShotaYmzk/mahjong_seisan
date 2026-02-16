@@ -14,26 +14,42 @@ type RuleSetRow = Database["public"]["Tables"]["rule_sets"]["Row"];
 interface Props {
   sessionId: string;
   ruleSet: RuleSetRow | null;
+  playerCount: 3 | 4;
   onRefetch: () => void;
 }
 
 /* ---------- Uma presets ---------- */
-const UMA_PRESETS = [
+const UMA_PRESETS_4P = [
   { id: "5-10", label: "5-10", desc: "ゴットー", small: 5, big: 10 },
   { id: "10-20", label: "10-20", desc: "ワンツー", small: 10, big: 20 },
   { id: "10-30", label: "10-30", desc: "ワンスリー", small: 10, big: 30 },
   { id: "20-30", label: "20-30", desc: "ツースリー", small: 20, big: 30 },
 ] as const;
 
-function detectUmaPreset(
+const UMA_PRESETS_3P = [
+  { id: "10", label: "10", desc: "イチマル", value: 10 },
+  { id: "20", label: "20", desc: "ニーマル", value: 20 },
+  { id: "30", label: "30", desc: "サンマル", value: 30 },
+] as const;
+
+function detectUmaPreset4P(
   u1: number,
   u2: number,
   u3: number,
   u4: number
 ): string {
   if (u3 === -u2 && u4 === -u1 && u1 > 0 && u2 > 0) {
-    for (const p of UMA_PRESETS) {
+    for (const p of UMA_PRESETS_4P) {
       if (p.small === u2 && p.big === u1) return p.id;
+    }
+  }
+  return "custom";
+}
+
+function detectUmaPreset3P(u1: number, u3: number): string {
+  if (u1 > 0 && u3 === -u1) {
+    for (const p of UMA_PRESETS_3P) {
+      if (p.value === u1) return p.id;
     }
   }
   return "custom";
@@ -77,7 +93,8 @@ const ALL_FIELD_KEYS = [
   "starting_chips",
 ];
 
-export function RuleTab({ sessionId, ruleSet, onRefetch }: Props) {
+export function RuleTab({ sessionId, ruleSet, playerCount, onRefetch }: Props) {
+  const is3P = playerCount === 3;
   const supabase = createClient();
   const { user } = useAuth();
   const [values, setValues] = useState<Record<string, string>>({
@@ -115,7 +132,11 @@ export function RuleTab({ sessionId, ruleSet, onRefetch }: Props) {
       const u2 = parseInt(v.uma_2) || 0;
       const u3 = parseInt(v.uma_3) || 0;
       const u4 = parseInt(v.uma_4) || 0;
-      setUmaPreset(detectUmaPreset(u1, u2, u3, u4));
+      setUmaPreset(
+        is3P
+          ? detectUmaPreset3P(u1, u3)
+          : detectUmaPreset4P(u1, u2, u3, u4)
+      );
       setRatePreset(detectRatePreset(parseInt(v.rate) || 0));
 
       setOkaType(ruleSet.oka_type);
@@ -129,41 +150,70 @@ export function RuleTab({ sessionId, ruleSet, onRefetch }: Props) {
   /* ---------- Uma handlers ---------- */
   const handleSelectPreset = (presetId: string) => {
     setUmaPreset(presetId);
-    const preset = UMA_PRESETS.find((p) => p.id === presetId);
-    if (preset) {
-      setValues((prev) => ({
-        ...prev,
-        uma_1: String(preset.big),
-        uma_2: String(preset.small),
-        uma_3: String(-preset.small),
-        uma_4: String(-preset.big),
-      }));
+    if (is3P) {
+      const preset = UMA_PRESETS_3P.find((p) => p.id === presetId);
+      if (preset) {
+        setValues((prev) => ({
+          ...prev,
+          uma_1: String(preset.value),
+          uma_2: "0",
+          uma_3: String(-preset.value),
+          uma_4: "0",
+        }));
+      }
+    } else {
+      const preset = UMA_PRESETS_4P.find((p) => p.id === presetId);
+      if (preset) {
+        setValues((prev) => ({
+          ...prev,
+          uma_1: String(preset.big),
+          uma_2: String(preset.small),
+          uma_3: String(-preset.small),
+          uma_4: String(-preset.big),
+        }));
+      }
     }
   };
 
   const handleCustomUmaChange = (which: "small" | "big", raw: string) => {
     const num = parseInt(raw) || 0;
-    if (which === "small") {
-      setValues((prev) => ({
-        ...prev,
-        uma_2: raw,
-        uma_3: String(-num),
-      }));
-    } else {
+    if (is3P) {
       setValues((prev) => ({
         ...prev,
         uma_1: raw,
-        uma_4: String(-num),
+        uma_2: "0",
+        uma_3: String(-num),
+        uma_4: "0",
       }));
+    } else {
+      if (which === "small") {
+        setValues((prev) => ({
+          ...prev,
+          uma_2: raw,
+          uma_3: String(-num),
+        }));
+      } else {
+        setValues((prev) => ({
+          ...prev,
+          uma_1: raw,
+          uma_4: String(-num),
+        }));
+      }
     }
   };
 
-  const umaValues = {
-    first: parseInt(values.uma_1) || 0,
-    second: parseInt(values.uma_2) || 0,
-    third: parseInt(values.uma_3) || 0,
-    fourth: parseInt(values.uma_4) || 0,
-  };
+  const umaDisplayValues = is3P
+    ? [
+        { rank: "1位", value: parseInt(values.uma_1) || 0 },
+        { rank: "2位", value: parseInt(values.uma_2) || 0 },
+        { rank: "3位", value: parseInt(values.uma_3) || 0 },
+      ]
+    : [
+        { rank: "1位", value: parseInt(values.uma_1) || 0 },
+        { rank: "2位", value: parseInt(values.uma_2) || 0 },
+        { rank: "3位", value: parseInt(values.uma_3) || 0 },
+        { rank: "4位", value: parseInt(values.uma_4) || 0 },
+      ];
 
   /* ---------- Save ---------- */
   const handleSave = async () => {
@@ -253,7 +303,16 @@ export function RuleTab({ sessionId, ruleSet, onRefetch }: Props) {
 
   return (
     <div className="p-4 flex flex-col gap-4">
-      <h2 className="text-lg font-bold">ルール設定</h2>
+      <div className="flex items-center gap-2">
+        <h2 className="text-lg font-bold">ルール設定</h2>
+        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+          is3P
+            ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-200 dark:border-purple-700/30"
+            : "bg-jade-surface text-jade border border-jade/20"
+        }`}>
+          {is3P ? "三人麻雀" : "四人麻雀"}
+        </span>
+      </div>
 
       {conflictError && (
         <div className="bg-red-surface border border-red/20 rounded-xl p-3 text-sm text-red">
@@ -272,21 +331,37 @@ export function RuleTab({ sessionId, ruleSet, onRefetch }: Props) {
 
         {/* Preset buttons */}
         <div className="flex flex-wrap gap-2 mb-4">
-          {UMA_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              onClick={() => handleSelectPreset(preset.id)}
-              className={presetBtnClass(umaPreset === preset.id)}
-            >
-              {preset.label}
-              {preset.desc && (
-                <span className="text-xs opacity-70 ml-1">
-                  ({preset.desc})
-                </span>
-              )}
-            </button>
-          ))}
+          {is3P
+            ? UMA_PRESETS_3P.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => handleSelectPreset(preset.id)}
+                  className={presetBtnClass(umaPreset === preset.id)}
+                >
+                  {preset.label}
+                  {preset.desc && (
+                    <span className="text-xs opacity-70 ml-1">
+                      ({preset.desc})
+                    </span>
+                  )}
+                </button>
+              ))
+            : UMA_PRESETS_4P.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => handleSelectPreset(preset.id)}
+                  className={presetBtnClass(umaPreset === preset.id)}
+                >
+                  {preset.label}
+                  {preset.desc && (
+                    <span className="text-xs opacity-70 ml-1">
+                      ({preset.desc})
+                    </span>
+                  )}
+                </button>
+              ))}
           <button
             type="button"
             onClick={() => setUmaPreset("custom")}
@@ -297,38 +372,45 @@ export function RuleTab({ sessionId, ruleSet, onRefetch }: Props) {
         </div>
 
         {/* Custom inputs */}
-        {umaPreset === "custom" && (
-          <div className="flex items-end gap-3 mb-4">
-            <div className="flex-1">
+        {umaPreset === "custom" &&
+          (is3P ? (
+            <div className="mb-4">
               <Input
-                label="ウマ小（千点）"
-                type="number"
-                value={values.uma_2}
-                onChange={(e) =>
-                  handleCustomUmaChange("small", e.target.value)
-                }
-              />
-            </div>
-            <span className="text-text-muted font-bold pb-2.5">−</span>
-            <div className="flex-1">
-              <Input
-                label="ウマ大（千点）"
+                label="ウマ（千点）　1位: +N / 2位: 0 / 3位: -N"
                 type="number"
                 value={values.uma_1}
                 onChange={(e) => handleCustomUmaChange("big", e.target.value)}
               />
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="flex items-end gap-3 mb-4">
+              <div className="flex-1">
+                <Input
+                  label="ウマ小（千点）"
+                  type="number"
+                  value={values.uma_2}
+                  onChange={(e) =>
+                    handleCustomUmaChange("small", e.target.value)
+                  }
+                />
+              </div>
+              <span className="text-text-muted font-bold pb-2.5">−</span>
+              <div className="flex-1">
+                <Input
+                  label="ウマ大（千点）"
+                  type="number"
+                  value={values.uma_1}
+                  onChange={(e) =>
+                    handleCustomUmaChange("big", e.target.value)
+                  }
+                />
+              </div>
+            </div>
+          ))}
 
         {/* Uma result display */}
-        <div className="grid grid-cols-4 gap-1 bg-bg-tertiary rounded-xl p-3">
-          {[
-            { rank: "1位", value: umaValues.first },
-            { rank: "2位", value: umaValues.second },
-            { rank: "3位", value: umaValues.third },
-            { rank: "4位", value: umaValues.fourth },
-          ].map((item) => (
+        <div className={`grid ${is3P ? "grid-cols-3" : "grid-cols-4"} gap-1 bg-bg-tertiary rounded-xl p-3`}>
+          {umaDisplayValues.map((item) => (
             <div key={item.rank} className="text-center">
               <div className="text-[10px] text-text-muted mb-0.5">
                 {item.rank}

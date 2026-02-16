@@ -1,12 +1,13 @@
 /** Pure domain types - no Supabase dependency */
 
 export interface RuleSet {
-  startingPoints: number; // 配給原点 (e.g., 25000)
-  returnPoints: number; // 返し点 (e.g., 30000)
+  playerCount: 3 | 4; // 対局人数: 3=三人麻雀, 4=四人麻雀
+  startingPoints: number; // 配給原点 (e.g., 25000 / 三麻: 35000)
+  returnPoints: number; // 返し点 (e.g., 30000 / 三麻: 40000)
   uma1: number; // 1位ウマ (千点単位, e.g., 10 = 10,000点)
   uma2: number; // 2位ウマ
   uma3: number; // 3位ウマ
-  uma4: number; // 4位ウマ
+  uma4: number; // 4位ウマ (三麻では未使用: 0)
   okaType: "winner_take_all" | "none";
   rate: number; // 円/千点 (e.g., 100 = テンピン)
   roundingUnit: number; // 丸め単位 (e.g., 100 = 100円単位)
@@ -95,12 +96,33 @@ export interface Settlement {
 }
 
 export const DEFAULT_RULE_SET: RuleSet = {
+  playerCount: 4,
   startingPoints: 25000,
   returnPoints: 30000,
   uma1: 10,
   uma2: 5,
   uma3: -5,
   uma4: -10,
+  okaType: "winner_take_all",
+  rate: 100,
+  roundingUnit: 100,
+  chipRate: 500,
+  startingChips: 0,
+  tobiBonusEnabled: false,
+  tobiBonusPoints: 0,
+  tobiBonusChips: 0,
+  tobiReceiverType: "top",
+};
+
+/** 三人麻雀のデフォルトルール */
+export const DEFAULT_RULE_SET_3P: RuleSet = {
+  playerCount: 3,
+  startingPoints: 35000,
+  returnPoints: 40000,
+  uma1: 20,
+  uma2: 0,
+  uma3: -20,
+  uma4: 0, // 未使用
   okaType: "winner_take_all",
   rate: 100,
   roundingUnit: 100,

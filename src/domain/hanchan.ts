@@ -37,16 +37,20 @@ export function calcHanchanResult(
   rules: RuleSet,
   tobiBusters?: Map<string, string>
 ): HanchanResult {
-  const expectedSum = rules.startingPoints * 4;
+  const pc = rules.playerCount;
+  const expectedSum = rules.startingPoints * pc;
   const scoreSum = scores.reduce((sum, s) => sum + s.rawScore, 0);
   const isConfirmed = scoreSum === expectedSum;
 
   const ranked = rankPlayers(scores);
-  const umaValues = [rules.uma1, rules.uma2, rules.uma3, rules.uma4];
+  const umaValues =
+    pc === 3
+      ? [rules.uma1, rules.uma2, rules.uma3]
+      : [rules.uma1, rules.uma2, rules.uma3, rules.uma4];
 
   const okaPool =
     rules.okaType === "winner_take_all"
-      ? (rules.returnPoints - rules.startingPoints) * 4
+      ? (rules.returnPoints - rules.startingPoints) * pc
       : 0;
 
   // Base calculation (before tobi)

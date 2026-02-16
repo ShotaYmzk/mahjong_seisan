@@ -148,6 +148,7 @@ export interface Database {
         Row: {
           id: string;
           session_id: string;
+          player_count: number;
           starting_points: number;
           return_points: number;
           uma_1: number;
@@ -170,6 +171,7 @@ export interface Database {
         Insert: {
           id?: string;
           session_id: string;
+          player_count?: number;
           starting_points?: number;
           return_points?: number;
           uma_1?: number;
@@ -192,6 +194,7 @@ export interface Database {
         Update: {
           id?: string;
           session_id?: string;
+          player_count?: number;
           starting_points?: number;
           return_points?: number;
           uma_1?: number;
