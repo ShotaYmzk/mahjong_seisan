@@ -1,36 +1,128 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🀄 麻雀精算 (Mahjong Settlement)
 
-## Getting Started
+麻雀セッションの精算を共同編集できるWebアプリ。
 
-First, run the development server:
+## 機能
+
+- **半荘管理**: 複数半荘の素点入力、合計点の自動検算
+- **チップ**: プレイヤー間のチップ移動を記録
+- **立替**: 飲食等の立替を割り勘計算（全員/指定）
+- **ルール設定**: 起点点数/返し点/ウマ/オカ/レート/チップ単価
+- **精算結果**: 最終差額の自動計算 + 送金リスト + LINEコピペ文
+- **共同編集**: Supabase Realtimeで即時反映
+- **楽観ロック**: 競合更新を検出して上書き事故を防止
+- **RLS**: Roomメンバーのみデータにアクセス可能
+
+## 技術スタック
+
+- **フロント**: Next.js 16 (App Router) + TypeScript + Tailwind CSS v4
+- **バックエンド**: Supabase (Postgres + Auth + Realtime + RLS)
+- **テスト**: Vitest
+
+## セットアップ
+
+### 1. 環境変数
+
+```bash
+cp .env.local.example .env.local
+```
+
+`.env.local` に Supabase プロジェクトの情報を入力:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+```
+
+### 2. 依存関係のインストール
+
+```bash
+npm install
+```
+
+### 3. Supabase CLI の設定
+
+```bash
+npx supabase login
+npx supabase link --project-ref <your-project-ref>
+```
+
+### 4. マイグレーション適用
+
+```bash
+npx supabase db push
+```
+
+### 5. Supabase Dashboard での設定
+
+1. **Authentication** → **Settings** → **Anonymous Sign-in** を有効化
+2. **Database** → **Replication** で以下のテーブルの Realtime を有効化:
+   - `hanchan`
+   - `round_results`
+   - `chip_events`
+   - `expenses`
+   - `expense_shares`
+   - `rule_sets`
+
+### 6. 型生成（オプション）
+
+```bash
+npm run gen:types
+```
+
+### 7. 開発サーバー起動
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## テスト
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 計算仕様
 
-## Learn More
+### 半荘→麻雀収支
 
-To learn more about Next.js, take a look at the following resources:
+1. 各プレイヤーの素点と返し点の差分を算出
+2. オカ（トップ取り方式）: (返し点 - 配給原点) × 4 を1位に加算
+3. ウマを順位に応じて加算
+4. レート（円/千点）で円換算
+5. 丸め単位で四捨五入
+6. 合計点が不一致の半荘は「未確定」として精算から除外
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### チップ
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+数量 × チップ単価で円換算し、最終差額に加算
 
-## Deploy on Vercel
+### 立替
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+支払者の全額を対象者で等分。端数は先頭の対象者から1円ずつ配分
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 送金リスト
+
+貪欲法で送金本数を最小化
+
+## プロジェクト構造
+
+```
+src/
+├── app/                  # Next.js App Router ページ
+├── components/
+│   ├── ui/              # 共通UIコンポーネント
+│   ├── room/            # ルーム関連
+│   └── session/         # セッション関連（5つのタブ）
+├── domain/              # 純関数の計算ロジック
+│   ├── hanchan.ts       # 半荘計算
+│   ├── chip.ts          # チップ計算
+│   ├── expense.ts       # 立替計算
+│   ├── settlement.ts    # 全体精算
+│   ├── transfer.ts      # 送金最適化
+│   └── __tests__/       # ユニットテスト
+├── hooks/               # React hooks
+├── lib/supabase/        # Supabase クライアント
+└── types/               # 型定義
+supabase/migrations/     # SQLマイグレーション（7ファイル）
+```
