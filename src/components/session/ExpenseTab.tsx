@@ -80,7 +80,6 @@ export function ExpenseTab({
       if (insertErr) throw insertErr;
       const expense = expenseData as unknown as { id: string };
 
-      // Create shares
       const targetIds = isAllMembers
         ? players.map((p) => p.id)
         : selectedPlayerIds;
@@ -138,6 +137,17 @@ export function ExpenseTab({
 
       {/* Add form */}
       <Card>
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-8 h-8 rounded-lg bg-gold-surface flex items-center justify-center shrink-0">
+            <span className="text-base">🧾</span>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-text-primary">
+              立替を追加
+            </p>
+          </div>
+        </div>
+
         <form onSubmit={addExpense} className="flex flex-col gap-3">
           <Select
             label="支払者"
@@ -161,45 +171,40 @@ export function ExpenseTab({
           />
 
           <div>
-            <p className="text-sm font-medium text-text-secondary mb-2">
+            <label className="text-[13px] font-medium text-text-secondary mb-2 block">
               割り勘対象
-            </p>
+            </label>
             <div className="flex gap-2 mb-2">
-              <button
-                type="button"
-                onClick={() => setIsAllMembers(true)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  isAllMembers
-                    ? "bg-jade text-bg-primary"
-                    : "bg-bg-tertiary text-text-secondary"
-                }`}
-              >
-                全員
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsAllMembers(false)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  !isAllMembers
-                    ? "bg-jade text-bg-primary"
-                    : "bg-bg-tertiary text-text-secondary"
-                }`}
-              >
-                指定
-              </button>
+              {[
+                { value: true, label: "全員" },
+                { value: false, label: "指定" },
+              ].map((opt) => (
+                <button
+                  key={String(opt.value)}
+                  type="button"
+                  onClick={() => setIsAllMembers(opt.value)}
+                  className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 ${
+                    isAllMembers === opt.value
+                      ? "bg-jade text-text-on-jade shadow-sm"
+                      : "bg-bg-tertiary text-text-secondary border border-border-primary hover:border-jade/30"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
 
             {!isAllMembers && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 mt-2">
                 {players.map((p) => (
                   <button
                     key={p.id}
                     type="button"
                     onClick={() => togglePlayer(p.id)}
-                    className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                    className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-150 ${
                       selectedPlayerIds.includes(p.id)
-                        ? "bg-jade/20 text-jade border border-jade/40"
-                        : "bg-bg-tertiary text-text-muted border border-border-primary"
+                        ? "bg-jade-surface text-jade border border-jade/30"
+                        : "bg-bg-tertiary text-text-muted border border-border-primary hover:border-border-primary"
                     }`}
                   >
                     {p.display_name}
@@ -209,8 +214,12 @@ export function ExpenseTab({
             )}
           </div>
 
-          {error && <p className="text-sm text-red">{error}</p>}
-          <Button type="submit" loading={adding} size="sm">
+          {error && (
+            <p className="text-sm text-red bg-red-surface border border-red/20 rounded-xl px-3 py-2">
+              {error}
+            </p>
+          )}
+          <Button type="submit" loading={adding} size="md">
             追加
           </Button>
         </form>
@@ -218,7 +227,10 @@ export function ExpenseTab({
 
       {/* Expense list */}
       {expenses.length === 0 ? (
-        <Card className="text-center py-6">
+        <Card className="text-center py-10">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-bg-tertiary mb-3">
+            <span className="text-2xl">🧾</span>
+          </div>
           <p className="text-text-muted text-sm">立替の記録はまだありません</p>
         </Card>
       ) : (
@@ -236,29 +248,31 @@ export function ExpenseTab({
               <Card key={exp.id}>
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm text-text-primary">
                         {getName(exp.payer_id)}
                       </span>
-                      <span className="text-jade font-bold text-sm">
+                      <span className="text-jade font-bold text-sm tabular-nums">
                         {exp.amount.toLocaleString()}円
                       </span>
                     </div>
                     {exp.description && (
-                      <p className="text-xs text-text-muted mt-0.5">
+                      <p className="text-xs text-text-secondary mt-1">
                         {exp.description}
                       </p>
                     )}
-                    <p className="text-xs text-text-muted mt-1">
+                    <p className="text-xs text-text-muted mt-1.5">
                       対象: {exp.is_all_members ? "全員" : targetNames}
-                      （1人 {perPerson.toLocaleString()}円）
+                      <span className="ml-1 text-text-secondary">
+                        （1人 {perPerson.toLocaleString()}円）
+                      </span>
                     </p>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => deleteExpense(exp.id)}
-                    className="text-red text-xs"
+                    className="text-red text-xs shrink-0 ml-2"
                   >
                     削除
                   </Button>

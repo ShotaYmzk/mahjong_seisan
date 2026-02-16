@@ -6,12 +6,11 @@ import { Card } from "@/components/ui/Card";
 import { PointBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { calcSettlement, generateLineText } from "@/domain/settlement";
-import type { RuleSet, ChipEvent, Expense, SessionPlayer } from "@/domain/types";
+import type { RuleSet, Expense, SessionPlayer } from "@/domain/types";
 import type { HanchanInput } from "@/domain/settlement";
 
 type HanchanRow = Database["public"]["Tables"]["hanchan"]["Row"];
 type RoundResultRow = Database["public"]["Tables"]["round_results"]["Row"];
-type ChipEventRow = Database["public"]["Tables"]["chip_events"]["Row"];
 type ExpenseRow = Database["public"]["Tables"]["expenses"]["Row"];
 type ExpenseShareRow = Database["public"]["Tables"]["expense_shares"]["Row"];
 type SessionPlayerRow = Database["public"]["Tables"]["session_players"]["Row"];
@@ -20,7 +19,6 @@ interface Props {
   sessionName: string;
   hanchanList: HanchanRow[];
   roundResults: RoundResultRow[];
-  chipEvents: ChipEventRow[];
   expenses: ExpenseRow[];
   expenseShares: ExpenseShareRow[];
   players: SessionPlayerRow[];
@@ -31,7 +29,6 @@ export function SettlementTab({
   sessionName,
   hanchanList,
   roundResults,
-  chipEvents,
   expenses,
   expenseShares,
   players,
@@ -53,13 +50,6 @@ export function SettlementTab({
       })),
     }));
 
-    const domainChipEvents: ChipEvent[] = chipEvents.map((ce) => ({
-      id: ce.id,
-      fromPlayerId: ce.from_player_id,
-      toPlayerId: ce.to_player_id,
-      quantity: ce.quantity,
-    }));
-
     const domainExpenses: Expense[] = expenses.map((exp) => {
       const shares = expenseShares.filter((s) => s.expense_id === exp.id);
       return {
@@ -77,24 +67,11 @@ export function SettlementTab({
       displayName: p.display_name,
       seatOrder: p.seat_order,
       userId: p.user_id,
+      chipCount: p.chip_count,
     }));
 
-    return calcSettlement(
-      hanchanInputs,
-      domainChipEvents,
-      domainExpenses,
-      domainPlayers,
-      rules
-    );
-  }, [
-    hanchanList,
-    roundResults,
-    chipEvents,
-    expenses,
-    expenseShares,
-    players,
-    rules,
-  ]);
+    return calcSettlement(hanchanInputs, domainExpenses, domainPlayers, rules);
+  }, [hanchanList, roundResults, expenses, expenseShares, players, rules]);
 
   const lineText = useMemo(
     () => generateLineText(settlement, sessionName),
@@ -107,7 +84,6 @@ export function SettlementTab({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback for older browsers
       const textarea = document.createElement("textarea");
       textarea.value = lineText;
       document.body.appendChild(textarea);
@@ -128,49 +104,68 @@ export function SettlementTab({
       <h2 className="text-lg font-bold">精算結果</h2>
 
       {settlement.hasUnconfirmed && (
-        <div className="bg-gold/10 border border-gold/30 rounded-xl p-3 text-sm text-gold">
+        <div className="bg-gold-surface border border-gold/20 rounded-xl p-3 text-sm text-gold flex items-start gap-2">
+          <svg className="w-4 h-4 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92z" clipRule="evenodd" />
+          </svg>
           未確定の半荘があります。合計点が不一致の半荘は精算に含まれません。
         </div>
       )}
 
       {/* Per-player breakdown */}
       <Card>
-        <h3 className="text-sm font-semibold text-text-secondary mb-3">
+        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-4">
           収支内訳
         </h3>
-        <div className="flex flex-col gap-3">
-          {sorted.map((pb) => (
+        <div className="flex flex-col gap-4">
+          {sorted.map((pb, i) => (
             <div
               key={pb.playerId}
-              className="flex flex-col gap-1 pb-3 border-b border-border-primary last:border-0 last:pb-0"
+              className={`flex flex-col gap-1.5 ${
+                i < sorted.length - 1
+                  ? "pb-4 border-b border-border-subtle"
+                  : ""
+              }`}
             >
               <div className="flex items-center justify-between">
-                <span className="font-semibold">{pb.displayName}</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-bg-tertiary flex items-center justify-center text-xs font-bold text-text-secondary">
+                    {i + 1}
+                  </div>
+                  <span className="font-semibold text-text-primary">
+                    {pb.displayName}
+                  </span>
+                </div>
                 <PointBadge value={pb.totalYen} />
               </div>
-              <div className="flex gap-4 text-xs text-text-muted">
+              <div className="flex gap-4 text-xs text-text-muted flex-wrap ml-8">
                 <span>
-                  麻雀:{" "}
-                  <span className="tabular-nums">
-                    {pb.mahjongYen >= 0 ? "+" : ""}
-                    {pb.mahjongYen.toLocaleString()}
+                  麻雀{" "}
+                  <span className="tabular-nums text-text-secondary">
+                    {pb.mahjongPoints >= 0 ? "+" : ""}
+                    {pb.mahjongPoints}p
+                  </span>
+                  <span className="text-text-muted">
+                    {" "}
+                    ({pb.mahjongYen >= 0 ? "+" : ""}
+                    {pb.mahjongYen.toLocaleString()}円)
                   </span>
                 </span>
                 {pb.chipYen !== 0 && (
                   <span>
-                    チップ:{" "}
-                    <span className="tabular-nums">
+                    チップ{" "}
+                    <span className="tabular-nums text-text-secondary">
                       {pb.chipYen >= 0 ? "+" : ""}
-                      {pb.chipYen.toLocaleString()}
+                      {pb.chipYen.toLocaleString()}円
                     </span>
                   </span>
                 )}
                 {pb.expenseYen !== 0 && (
                   <span>
-                    立替:{" "}
-                    <span className="tabular-nums">
+                    立替{" "}
+                    <span className="tabular-nums text-text-secondary">
                       {pb.expenseYen >= 0 ? "+" : ""}
-                      {pb.expenseYen.toLocaleString()}
+                      {pb.expenseYen.toLocaleString()}円
                     </span>
                   </span>
                 )}
@@ -183,21 +178,27 @@ export function SettlementTab({
       {/* Transfer list */}
       {settlement.transfers.length > 0 && (
         <Card>
-          <h3 className="text-sm font-semibold text-text-secondary mb-3">
+          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-4">
             送金リスト
           </h3>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             {settlement.transfers.map((t, i) => (
               <div
                 key={i}
-                className="flex items-center justify-between py-2 border-b border-border-primary last:border-0 last:pb-0"
+                className={`flex items-center justify-between ${
+                  i < settlement.transfers.length - 1
+                    ? "pb-3 border-b border-border-subtle"
+                    : ""
+                }`}
               >
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-red font-medium">{t.fromName}</span>
-                  <span className="text-text-muted">→</span>
+                  <svg className="w-4 h-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
                   <span className="text-jade font-medium">{t.toName}</span>
                 </div>
-                <span className="font-bold text-sm tabular-nums">
+                <span className="font-bold text-sm tabular-nums text-text-primary">
                   {t.amount.toLocaleString()}円
                 </span>
               </div>
@@ -208,14 +209,28 @@ export function SettlementTab({
 
       {/* LINE Copy */}
       <Card>
-        <h3 className="text-sm font-semibold text-text-secondary mb-3">
+        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
           コピペ用テキスト
         </h3>
-        <pre className="text-xs text-text-secondary whitespace-pre-wrap bg-bg-tertiary rounded-lg p-3 mb-3 font-mono">
+        <pre className="text-xs text-text-secondary whitespace-pre-wrap bg-bg-tertiary rounded-xl p-3 mb-4 font-mono leading-relaxed border border-border-subtle">
           {lineText}
         </pre>
         <Button onClick={handleCopy} variant="secondary" size="sm">
-          {copied ? "コピーしました!" : "クリップボードにコピー"}
+          {copied ? (
+            <span className="flex items-center gap-1.5">
+              <svg className="w-4 h-4 text-jade" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              コピーしました
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              クリップボードにコピー
+            </span>
+          )}
         </Button>
       </Card>
     </div>

@@ -6,7 +6,11 @@ interface BadgeProps {
   showSign?: boolean;
 }
 
-export function PointBadge({ value, suffix = "円", showSign = true }: BadgeProps) {
+export function PointBadge({
+  value,
+  suffix = "円",
+  showSign = true,
+}: BadgeProps) {
   const cls = value > 0 ? "positive" : value < 0 ? "negative" : "zero";
   const sign = showSign && value > 0 ? "+" : "";
   return (
@@ -20,7 +24,7 @@ export function PointBadge({ value, suffix = "円", showSign = true }: BadgeProp
 
 export function StatusBadge({ confirmed }: { confirmed: boolean }) {
   return confirmed ? (
-    <span className="inline-flex items-center gap-1 text-xs font-medium text-jade bg-jade/15 px-2 py-0.5 rounded-full">
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-jade bg-jade-surface border border-jade/20 px-2.5 py-1 rounded-full">
       <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
         <path
           fillRule="evenodd"
@@ -31,7 +35,7 @@ export function StatusBadge({ confirmed }: { confirmed: boolean }) {
       確定
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 text-xs font-medium text-gold bg-gold/15 px-2 py-0.5 rounded-full">
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-gold bg-gold-surface border border-gold/20 px-2.5 py-1 rounded-full">
       <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
         <path
           fillRule="evenodd"

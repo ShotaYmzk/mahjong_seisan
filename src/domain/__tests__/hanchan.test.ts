@@ -54,37 +54,34 @@ describe("calcHanchanResult", () => {
 
     // A: diff = 45000 - 30000 = 15000, oka = 20000, uma = 10000
     // total = 15000 + 20000 + 10000 = 45000
-    // yen = 45000 * 100 / 1000 = 4500
+    // points = 45000 / 1000 = 45
     expect(pA.pointDiff).toBe(15000);
     expect(pA.okaAmount).toBe(20000);
     expect(pA.umaAmount).toBe(10000);
     expect(pA.totalPoints).toBe(45000);
-    expect(pA.yenRounded).toBe(4500);
+    expect(pA.points).toBe(45);
 
     // B: diff = -2000, oka = 0, uma = 5000
-    // total = -2000 + 0 + 5000 = 3000
-    // yen = 3000 * 100 / 1000 = 300
+    // total = 3000, points = 3
     expect(pB.pointDiff).toBe(-2000);
     expect(pB.okaAmount).toBe(0);
     expect(pB.umaAmount).toBe(5000);
     expect(pB.totalPoints).toBe(3000);
-    expect(pB.yenRounded).toBe(300);
+    expect(pB.points).toBe(3);
 
     // C: diff = -15000, oka = 0, uma = -5000
-    // total = -15000 + 0 + (-5000) = -20000
-    // yen = -20000 * 100 / 1000 = -2000
+    // total = -20000, points = -20
     expect(pC.totalPoints).toBe(-20000);
-    expect(pC.yenRounded).toBe(-2000);
+    expect(pC.points).toBe(-20);
 
     // D: diff = -18000, oka = 0, uma = -10000
-    // total = -18000 + 0 + (-10000) = -28000
-    // yen = -28000 * 100 / 1000 = -2800
+    // total = -28000, points = -28
     expect(pD.totalPoints).toBe(-28000);
-    expect(pD.yenRounded).toBe(-2800);
+    expect(pD.points).toBe(-28);
 
-    // Sum of yen should be 0
-    const totalYen = result.playerResults.reduce((s, p) => s + p.yenRounded, 0);
-    expect(totalYen).toBe(0);
+    // Sum of points should be 0
+    const totalPts = result.playerResults.reduce((s, p) => s + p.points, 0);
+    expect(totalPts).toBe(0);
   });
 
   it("detects unconfirmed hanchan when score sum is wrong", () => {
@@ -133,10 +130,11 @@ describe("calcHanchanResult", () => {
     // No oka: A gets diff + uma only
     expect(pA.okaAmount).toBe(0);
     expect(pA.totalPoints).toBe(15000 + 0 + 10000);
+    expect(pA.points).toBe(25);
   });
 
-  it("works with テンゴ rate", () => {
-    const tengo: RuleSet = { ...rules, rate: 50 }; // 50 yen per 1000 points
+  it("returns correct points for テンゴ rate (points unaffected by rate)", () => {
+    const tengo: RuleSet = { ...rules, rate: 50 }; // 50 yen per point
     const scores: PlayerScore[] = [
       { playerId: "A", seatOrder: 1, rawScore: 45000 },
       { playerId: "B", seatOrder: 2, rawScore: 28000 },
@@ -147,7 +145,100 @@ describe("calcHanchanResult", () => {
     const result = calcHanchanResult("h1", 1, scores, tengo);
     const pA = result.playerResults.find((p) => p.playerId === "A")!;
 
-    // total = 45000 points, yen = 45000 * 50 / 1000 = 2250
-    expect(pA.yenRounded).toBe(2300); // rounded to 100
+    // Points are independent of rate
+    // total = 45000, points = 45
+    expect(pA.points).toBe(45);
+  });
+
+  it("detects tobi (busted player with score <= 0)", () => {
+    const scores: PlayerScore[] = [
+      { playerId: "A", seatOrder: 1, rawScore: 60000 },
+      { playerId: "B", seatOrder: 2, rawScore: 30000 },
+      { playerId: "C", seatOrder: 3, rawScore: 10000 },
+      { playerId: "D", seatOrder: 4, rawScore: 0 },
+    ];
+
+    const result = calcHanchanResult("h1", 1, scores, rules);
+    const pD = result.playerResults.find((p) => p.playerId === "D")!;
+    expect(pD.isTobi).toBe(true);
+    expect(pD.tobiBonusPoints).toBe(0); // No tobi bonus in default rules
+  });
+
+  it("applies tobi bonus points (top receiver)", () => {
+    const tobiRules: RuleSet = {
+      ...rules,
+      tobiBonusEnabled: true,
+      tobiBonusPoints: 10,
+      tobiBonusChips: 0,
+      tobiReceiverType: "top",
+    };
+    const scores: PlayerScore[] = [
+      { playerId: "A", seatOrder: 1, rawScore: 60000 },
+      { playerId: "B", seatOrder: 2, rawScore: 30000 },
+      { playerId: "C", seatOrder: 3, rawScore: 10000 },
+      { playerId: "D", seatOrder: 4, rawScore: 0 },
+    ];
+
+    const result = calcHanchanResult("h1", 1, scores, tobiRules);
+    const pA = result.playerResults.find((p) => p.playerId === "A")!;
+    const pD = result.playerResults.find((p) => p.playerId === "D")!;
+
+    // D flew: -10p penalty, A (top) receives +10p
+    expect(pD.isTobi).toBe(true);
+    expect(pD.tobiBonusPoints).toBe(-10);
+    expect(pA.tobiBonusPoints).toBe(10);
+
+    // Sum of points should still be 0
+    const totalPts = result.playerResults.reduce((s, p) => s + p.points, 0);
+    expect(totalPts).toBe(0);
+  });
+
+  it("applies tobi bonus chips (creates tobiEvents)", () => {
+    const tobiRules: RuleSet = {
+      ...rules,
+      tobiBonusEnabled: true,
+      tobiBonusPoints: 0,
+      tobiBonusChips: 2,
+      tobiReceiverType: "top",
+    };
+    const scores: PlayerScore[] = [
+      { playerId: "A", seatOrder: 1, rawScore: 60000 },
+      { playerId: "B", seatOrder: 2, rawScore: 30000 },
+      { playerId: "C", seatOrder: 3, rawScore: 10000 },
+      { playerId: "D", seatOrder: 4, rawScore: 0 },
+    ];
+
+    const result = calcHanchanResult("h1", 1, scores, tobiRules);
+    expect(result.tobiEvents).toHaveLength(1);
+    expect(result.tobiEvents[0].bustedPlayerId).toBe("D");
+    expect(result.tobiEvents[0].receiverPlayerId).toBe("A");
+    expect(result.tobiEvents[0].bonusChips).toBe(2);
+  });
+
+  it("applies tobi bonus with manual receiver", () => {
+    const tobiRules: RuleSet = {
+      ...rules,
+      tobiBonusEnabled: true,
+      tobiBonusPoints: 10,
+      tobiBonusChips: 1,
+      tobiReceiverType: "manual",
+    };
+    const scores: PlayerScore[] = [
+      { playerId: "A", seatOrder: 1, rawScore: 60000 },
+      { playerId: "B", seatOrder: 2, rawScore: 30000 },
+      { playerId: "C", seatOrder: 3, rawScore: 10000 },
+      { playerId: "D", seatOrder: 4, rawScore: 0 },
+    ];
+
+    // B busted D
+    const tobiBusters = new Map([["D", "B"]]);
+    const result = calcHanchanResult("h1", 1, scores, tobiRules, tobiBusters);
+
+    const pB = result.playerResults.find((p) => p.playerId === "B")!;
+    const pD = result.playerResults.find((p) => p.playerId === "D")!;
+
+    expect(pD.tobiBonusPoints).toBe(-10);
+    expect(pB.tobiBonusPoints).toBe(10);
+    expect(result.tobiEvents[0].receiverPlayerId).toBe("B");
   });
 });

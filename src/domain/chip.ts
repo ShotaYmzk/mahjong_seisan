@@ -1,27 +1,27 @@
-import type { ChipEvent } from "./types";
+import type { SessionPlayer } from "./types";
 
 /**
- * Calculate net chip balance for each player.
- * from_player pays quantity * chipRate, to_player receives the same.
+ * Calculate net chip yen for each player.
+ *
+ * Formula: (chipCount - startingChips) × chipRate
+ *
+ * Players with chipCount === null (not yet entered) are treated as 0 net.
  * Returns: Map<playerId, net yen from chips>
  */
 export function calcChipBalance(
-  events: ChipEvent[],
+  players: SessionPlayer[],
+  startingChips: number,
   chipRate: number
 ): Map<string, number> {
   const balance = new Map<string, number>();
 
-  for (const event of events) {
-    const amount = event.quantity * chipRate;
-
-    balance.set(
-      event.fromPlayerId,
-      (balance.get(event.fromPlayerId) ?? 0) - amount
-    );
-    balance.set(
-      event.toPlayerId,
-      (balance.get(event.toPlayerId) ?? 0) + amount
-    );
+  for (const player of players) {
+    if (player.chipCount !== null) {
+      const netChips = player.chipCount - startingChips;
+      balance.set(player.id, netChips * chipRate);
+    } else {
+      balance.set(player.id, 0);
+    }
   }
 
   return balance;

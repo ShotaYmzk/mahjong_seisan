@@ -11,6 +11,11 @@ export interface RuleSet {
   rate: number; // 円/千点 (e.g., 100 = テンピン)
   roundingUnit: number; // 丸め単位 (e.g., 100 = 100円単位)
   chipRate: number; // チップ単価 (e.g., 500 = 1枚500円)
+  startingChips: number; // 開始チップ枚数 (e.g., 20)
+  tobiBonusEnabled: boolean; // 飛び賞 ON/OFF
+  tobiBonusPoints: number; // 飛び賞ポイント (千点単位, e.g., 10 = 10p)
+  tobiBonusChips: number; // 飛び賞チップ枚数
+  tobiReceiverType: "top" | "manual"; // 受取人: トップ or 手動
 }
 
 export interface PlayerScore {
@@ -26,9 +31,16 @@ export interface HanchanPlayerResult {
   pointDiff: number; // 返し点からの差分 (点)
   okaAmount: number; // オカ加算分 (点)
   umaAmount: number; // ウマ加算分 (点)
-  totalPoints: number; // 合算後の点数差分
-  yenAmount: number; // 円換算後（丸め前）
-  yenRounded: number; // 丸め後の円
+  totalPoints: number; // 合算後の点数差分 (点単位)
+  points: number; // 千点単位ポイント (totalPoints / 1000)
+  isTobi: boolean; // 飛んだ (rawScore <= 0)
+  tobiBonusPoints: number; // 飛び賞によるポイント補正 (千点単位)
+}
+
+export interface TobiEvent {
+  bustedPlayerId: string;
+  receiverPlayerId: string;
+  bonusChips: number;
 }
 
 export interface HanchanResult {
@@ -38,13 +50,7 @@ export interface HanchanResult {
   scoreSum: number;
   expectedSum: number;
   playerResults: HanchanPlayerResult[];
-}
-
-export interface ChipEvent {
-  id: string;
-  fromPlayerId: string;
-  toPlayerId: string;
-  quantity: number;
+  tobiEvents: TobiEvent[];
 }
 
 export interface Expense {
@@ -61,12 +67,14 @@ export interface SessionPlayer {
   displayName: string;
   seatOrder: number;
   userId: string | null;
+  chipCount: number | null; // 終了時チップ枚数 (null = 未入力)
 }
 
 export interface PlayerBalance {
   playerId: string;
   displayName: string;
-  mahjongYen: number;
+  mahjongPoints: number; // 全半荘のポイント合計 (千点単位)
+  mahjongYen: number; // mahjongPoints × rate を丸めた円
   chipYen: number;
   expenseYen: number;
   totalYen: number;
@@ -97,4 +105,9 @@ export const DEFAULT_RULE_SET: RuleSet = {
   rate: 100,
   roundingUnit: 100,
   chipRate: 500,
+  startingChips: 0,
+  tobiBonusEnabled: false,
+  tobiBonusPoints: 0,
+  tobiBonusChips: 0,
+  tobiReceiverType: "top",
 };

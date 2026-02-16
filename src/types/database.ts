@@ -13,22 +13,52 @@ export interface Database {
         Row: {
           id: string;
           name: string;
-          passphrase: string;
           created_by: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           name: string;
-          passphrase: string;
           created_by?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           name?: string;
-          passphrase?: string;
           created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      invite_links: {
+        Row: {
+          id: string;
+          token: string;
+          room_id: string;
+          created_by: string;
+          expires_at: string;
+          max_uses: number;
+          use_count: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          token: string;
+          room_id: string;
+          created_by: string;
+          expires_at: string;
+          max_uses?: number;
+          use_count?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          token?: string;
+          room_id?: string;
+          created_by?: string;
+          expires_at?: string;
+          max_uses?: number;
+          use_count?: number;
           created_at?: string;
         };
         Relationships: [];
@@ -94,6 +124,7 @@ export interface Database {
           user_id: string | null;
           display_name: string;
           seat_order: number;
+          chip_count: number | null;
         };
         Insert: {
           id?: string;
@@ -101,6 +132,7 @@ export interface Database {
           user_id?: string | null;
           display_name: string;
           seat_order: number;
+          chip_count?: number | null;
         };
         Update: {
           id?: string;
@@ -108,6 +140,7 @@ export interface Database {
           user_id?: string | null;
           display_name?: string;
           seat_order?: number;
+          chip_count?: number | null;
         };
         Relationships: [];
       };
@@ -125,6 +158,11 @@ export interface Database {
           rate: number;
           rounding_unit: number;
           chip_rate: number;
+          starting_chips: number;
+          tobi_bonus_enabled: boolean;
+          tobi_bonus_points: number;
+          tobi_bonus_chips: number;
+          tobi_receiver_type: string;
           revision: number;
           created_at: string;
           updated_at: string;
@@ -142,6 +180,11 @@ export interface Database {
           rate?: number;
           rounding_unit?: number;
           chip_rate?: number;
+          starting_chips?: number;
+          tobi_bonus_enabled?: boolean;
+          tobi_bonus_points?: number;
+          tobi_bonus_chips?: number;
+          tobi_receiver_type?: string;
           revision?: number;
           created_at?: string;
           updated_at?: string;
@@ -159,6 +202,11 @@ export interface Database {
           rate?: number;
           rounding_unit?: number;
           chip_rate?: number;
+          starting_chips?: number;
+          tobi_bonus_enabled?: boolean;
+          tobi_bonus_points?: number;
+          tobi_bonus_chips?: number;
+          tobi_receiver_type?: string;
           revision?: number;
           created_at?: string;
           updated_at?: string;
@@ -202,6 +250,7 @@ export interface Database {
           session_id: string;
           player_id: string;
           raw_score: number;
+          tobi_by_player_id: string | null;
           revision: number;
         };
         Insert: {
@@ -210,6 +259,7 @@ export interface Database {
           session_id: string;
           player_id: string;
           raw_score: number;
+          tobi_by_player_id?: string | null;
           revision?: number;
         };
         Update: {
@@ -218,6 +268,7 @@ export interface Database {
           session_id?: string;
           player_id?: string;
           raw_score?: number;
+          tobi_by_player_id?: string | null;
           revision?: number;
         };
         Relationships: [];
@@ -336,9 +387,17 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
-      find_room_by_passphrase: {
-        Args: { p_passphrase: string };
-        Returns: string | null;
+      create_room_with_invite: {
+        Args: { p_name: string; p_display_name: string };
+        Returns: Json;
+      };
+      join_room_via_invite: {
+        Args: { p_token: string; p_display_name: string };
+        Returns: string;
+      };
+      create_invite_link: {
+        Args: { p_room_id: string };
+        Returns: string;
       };
     };
     Enums: Record<string, never>;

@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 const WATCHED_TABLES = [
   "hanchan",
   "round_results",
-  "chip_events",
+  "session_players",
   "expenses",
   "expense_shares",
   "rule_sets",

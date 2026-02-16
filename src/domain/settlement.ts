@@ -2,13 +2,12 @@ import type {
   RuleSet,
   PlayerScore,
   SessionPlayer,
-  ChipEvent,
   Expense,
   Settlement,
   PlayerBalance,
   HanchanResult,
 } from "./types";
-import { calcHanchanResult } from "./hanchan";
+import { calcHanchanResult, roundToUnit } from "./hanchan";
 import { calcChipBalance } from "./chip";
 import { calcExpenseBalance } from "./expense";
 import { calcTransfers } from "./transfer";
@@ -17,15 +16,20 @@ export interface HanchanInput {
   hanchanId: string;
   seq: number;
   scores: PlayerScore[];
+  tobiBusters?: Map<string, string>;
 }
 
 /**
  * Calculate the full settlement for a session.
  * Aggregates: mahjong results + chips + expenses => final balances + transfers
+ *
+ * Chips are calculated from each player's ending chip count:
+ *   chipYen = (chipCount - startingChips) × chipRate
+ * Tobi bonus chips are assumed to be already included in the player's
+ * physical chip count at the end of the session.
  */
 export function calcSettlement(
   hanchanInputs: HanchanInput[],
-  chipEvents: ChipEvent[],
   expenses: Expense[],
   players: SessionPlayer[],
   rules: RuleSet
@@ -35,38 +39,47 @@ export function calcSettlement(
 
   // Calculate each hanchan
   const hanchanResults: HanchanResult[] = hanchanInputs.map((h) =>
-    calcHanchanResult(h.hanchanId, h.seq, h.scores, rules)
+    calcHanchanResult(h.hanchanId, h.seq, h.scores, rules, h.tobiBusters)
   );
 
   const hasUnconfirmed = hanchanResults.some((h) => !h.isConfirmed);
 
-  // Aggregate mahjong yen per player (only confirmed hanchan)
-  const mahjongYen = new Map<string, number>();
+  // Aggregate mahjong points per player (only confirmed hanchan)
+  const mahjongPoints = new Map<string, number>();
   for (const result of hanchanResults) {
     if (!result.isConfirmed) continue;
     for (const pr of result.playerResults) {
-      mahjongYen.set(pr.playerId, (mahjongYen.get(pr.playerId) ?? 0) + pr.yenRounded);
+      mahjongPoints.set(
+        pr.playerId,
+        (mahjongPoints.get(pr.playerId) ?? 0) + pr.points
+      );
     }
   }
 
-  // Chip balance
-  const chipBalance = calcChipBalance(chipEvents, rules.chipRate);
+  // Chip balance from ending chip counts
+  const chipBalance = calcChipBalance(
+    players,
+    rules.startingChips,
+    rules.chipRate
+  );
 
   // Expense balance
   const expenseBalance = calcExpenseBalance(expenses, playerIds);
 
-  // Build player balances
+  // Build player balances (yen conversion happens once here)
   const playerBalances: PlayerBalance[] = playerIds.map((pid) => {
-    const mj = mahjongYen.get(pid) ?? 0;
+    const pts = mahjongPoints.get(pid) ?? 0;
+    const mjYen = roundToUnit(pts * rules.rate, rules.roundingUnit);
     const chip = chipBalance.get(pid) ?? 0;
     const exp = expenseBalance.get(pid) ?? 0;
     return {
       playerId: pid,
       displayName: playerMap.get(pid)?.displayName ?? "?",
-      mahjongYen: mj,
+      mahjongPoints: pts,
+      mahjongYen: mjYen,
       chipYen: chip,
       expenseYen: exp,
-      totalYen: mj + chip + exp,
+      totalYen: mjYen + chip + exp,
     };
   });
 
@@ -113,7 +126,10 @@ export function generateLineText(
 
   for (const pb of sorted) {
     const sign = pb.totalYen >= 0 ? "+" : "";
-    lines.push(`  ${pb.displayName}: ${sign}${pb.totalYen.toLocaleString()}円`);
+    const ptSign = pb.mahjongPoints >= 0 ? "+" : "";
+    lines.push(
+      `  ${pb.displayName}: ${ptSign}${pb.mahjongPoints}p → ${sign}${pb.totalYen.toLocaleString()}円`
+    );
   }
 
   if (settlement.transfers.length > 0) {
